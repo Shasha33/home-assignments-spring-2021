@@ -57,6 +57,11 @@ def _merge_corners(corner_points, new_corner_points, maxCorners, minDistance):
     corner_points = np.concatenate((corner_points, new_corner_points.reshape((-1, 2))), axis=0)
     return corner_points[:maxCorners]
 
+def build_mask(points, size_h, size_w, minDistance):
+    mask = np.ones((size_h, size_w)) * 255
+    for point in points:
+        mask = cv2.circle(mask, (int(point[0] * size_h), int(point[1] * size_w)), minDistance, (0, 0, 0), -1)
+       
 
 def _build_impl(frame_sequence: pims.FramesSequence,
                 builder: _CornerStorageBuilder) -> None:
@@ -93,14 +98,16 @@ def _build_impl(frame_sequence: pims.FramesSequence,
         corner_points = nextPts[status == 1]
         ids = ids[status == 1]
 
-        new_corner_points = cv2.goodFeaturesToTrack(image_1, maxCorners, qualityLevel, minDistance, blockSize = blockSize)
-        corner_points = _merge_corners(corner_points, new_corner_points, maxCorners, minDistance)
+        mask = build_mask(corner_points, image_1.shape[0], image_1.shape[1], minDistance)
+        new_corner_points = cv2.goodFeaturesToTrack(image_1, max(maxCorners - corner_points.shape[0], 1), qualityLevel, minDistance, blockSize = blockSize, mask=mask)
+        corner_points = np.append(corner_points, new_corner_points.reshape((-1, 2)), axis=0)
         sizes = np.full((corner_points.shape[0], 2), blockSize)
 
-        new_points_num = corner_points.shape[0] - ids.shape[0]
-        new_ids = np.arange(np.max(ids) + 1, np.max(ids) + 1 + new_points_num, 1).reshape((-1, 1))
-        ids = np.concatenate((ids.reshape((-1, 1)), new_ids))
-
+        new_points_num = new_corner_points.shape[0]
+        new_ids = np.arange(np.max(ids) + 1, np.max(ids) + 1 + new_points_num, 1)
+        
+        ids = np.concatenate((ids, new_ids)).reshape((-1, 1))
+        
         corners = FrameCorners(
             ids,
             corner_points,
