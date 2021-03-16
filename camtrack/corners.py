@@ -46,17 +46,67 @@ class _CornerStorageBuilder:
         return StorageImpl(item[1] for item in sorted(self._corners.items()))
 
 
+def _distance_to_point(points, point, minDistance):
+    distances = (points - point) ** 2
+    return distances[distances > minDistance ** 2]
+
+def _merge_corners(corner_points, new_corner_points, maxCorners, minDistance):
+    new_corners_dist = np.array([_distance_to_point(corner_points, point, minDistance).shape[0] > 0 for point in new_corner_points])
+    new_corner_points = new_corner_points[new_corners_dist]
+
+    corner_points = np.concatenate((corner_points, new_corner_points.reshape((-1, 2))), axis=0)
+    return corner_points[:maxCorners]
+
+
 def _build_impl(frame_sequence: pims.FramesSequence,
                 builder: _CornerStorageBuilder) -> None:
-    # TODO
+    
     image_0 = frame_sequence[0]
+
+    maxCorners = image_0.shape[0] * image_0.shape[1] // 1000
+    qualityLevel = 0.01
+    minDistance = 5
+    blockSize = 10
+
+    corner_points = cv2.goodFeaturesToTrack(image_0, maxCorners, qualityLevel, minDistance, blockSize = blockSize)
+    ids = np.arange(0, corner_points.shape[0], 1).reshape((-1, 1))
+    sizes = np.full((corner_points.shape[0], 2), blockSize)
     corners = FrameCorners(
-        np.array([0]),
-        np.array([[0, 0]]),
-        np.array([55])
+        ids,
+        corner_points,
+        sizes
     )
     builder.set_corners_at_frame(0, corners)
+
+    maxLevel = 3
+    maxCount = 10
+    epsilon = 0.03
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, maxCount, epsilon)
+
     for frame, image_1 in enumerate(frame_sequence[1:], 1):
+        image_0_8u = (image_0 * 255).astype(np.uint8) 
+        image_1_8u = (image_1 * 255).astype(np.uint8) 
+    
+        nextPts, status, err = cv2.calcOpticalFlowPyrLK(image_0_8u, image_1_8u, corner_points, None,
+         winSize = (blockSize, blockSize), maxLevel = maxLevel, criteria = criteria)
+
+        corner_points = nextPts[status == 1]
+        ids = ids[status == 1]
+
+        new_corner_points = cv2.goodFeaturesToTrack(image_1, maxCorners, qualityLevel, minDistance, blockSize = blockSize)
+        corner_points = _merge_corners(corner_points, new_corner_points, maxCorners, minDistance)
+        sizes = np.full((corner_points.shape[0], 2), blockSize)
+
+        new_ids = np.arange(ids.shape[0], corner_points.shape[0], 1).reshape((-1, 1))
+        ids = np.concatenate((ids.reshape((-1, 1)), new_ids))
+
+        corners = FrameCorners(
+            ids,
+            corner_points,
+            sizes
+        )
+
+        corner_points = corner_points.reshape((-1, 1, 2))
         builder.set_corners_at_frame(frame, corners)
         image_0 = image_1
 
