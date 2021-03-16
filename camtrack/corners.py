@@ -47,11 +47,11 @@ class _CornerStorageBuilder:
 
 
 def _distance_to_point(points, point, minDistance):
-    distances = (points - point) ** 2
-    return distances[distances > minDistance ** 2]
+    distances = np.apply_along_axis(np.linalg.norm, 1, (points - point))
+    return np.sum(distances <= minDistance) == 0
 
 def _merge_corners(corner_points, new_corner_points, maxCorners, minDistance):
-    new_corners_dist = np.array([_distance_to_point(corner_points, point, minDistance).shape[0] > 0 for point in new_corner_points])
+    new_corners_dist = np.array([_distance_to_point(corner_points, point, minDistance) for point in new_corner_points])
     new_corner_points = new_corner_points[new_corners_dist]
 
     corner_points = np.concatenate((corner_points, new_corner_points.reshape((-1, 2))), axis=0)
@@ -97,7 +97,8 @@ def _build_impl(frame_sequence: pims.FramesSequence,
         corner_points = _merge_corners(corner_points, new_corner_points, maxCorners, minDistance)
         sizes = np.full((corner_points.shape[0], 2), blockSize)
 
-        new_ids = np.arange(ids.shape[0], corner_points.shape[0], 1).reshape((-1, 1))
+        new_points_num = corner_points.shape[0] - ids.shape[0]
+        new_ids = np.arange(np.max(ids) + 1, np.max(ids) + 1 + new_points_num, 1).reshape((-1, 1))
         ids = np.concatenate((ids.reshape((-1, 1)), new_ids))
 
         corners = FrameCorners(
