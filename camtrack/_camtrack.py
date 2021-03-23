@@ -479,8 +479,10 @@ def create_cli(track_and_calc_colors):
                     frame = 0
                 if key == 'a' and frame > 0:
                     frame -= 1
+                    print(frame)
                 if key == 'd' and frame + 1 < len(corner_storage):
                     frame += 1
+                    print(frame)
                 if key == 'q':
                     break
     return cli
